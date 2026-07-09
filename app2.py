@@ -12,6 +12,22 @@ record_number = st.sidebar.selectbox(
      ["100","101","102","103","104","105","106","107"]
 )
 
+uploaded_file = st.sidebar.file_uploader(
+    "Upload ECG CSV File",
+    type=["csv"]
+)
+
+if uploaded_file is not None:
+    df = pd.read_csv(uploaded_file)
+    st.write(df)
+    
+sampling_rate = st.sidebar.number_input(
+    "Sampling Rate (Hz)",
+    min_value=100,
+    max_value=1000,
+    value=360
+)
+
 duration = st.sidebar.slider(
     "ECG Duration (seconds)",
     5,
@@ -101,15 +117,6 @@ st.download_button(
     file_name="ecg_results.csv",
     mime="text/csv"
 )
-
-uploaded_file = st.sidebar.file_uploader(
-    "Upload ECG CSV File",
-    type=["csv"]
-)
-
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
-    st.write(df)
 
 st.markdown("---")
 st.markdown("""
