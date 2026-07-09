@@ -103,6 +103,11 @@ st.download_button(
     mime="text/csv"
 )
 
+uploaded_file = st.file_uploader(
+    "Upload ECG CSV File",
+    type=["csv"]
+)
+
 st.markdown("---")
 st.markdown("""
 ### About
