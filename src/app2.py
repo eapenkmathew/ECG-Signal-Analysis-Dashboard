@@ -33,8 +33,10 @@ ecg = record.p_signal[:, 0]
 num_samples = duration * sampling_rate
 ecg = ecg[:num_samples]
 
+# Clean the ECG signal using NeuroKit2
 cleaned = nk.ecg_clean(ecg, sampling_rate=360)
 
+# Extract R-peaks and calculate heart rate
 signals, info = nk.ecg_peaks(
     cleaned,
     sampling_rate=360
@@ -51,6 +53,7 @@ st.metric(
 
 time = np.arange(len(cleaned)) / sampling_rate
 
+# Plot the cleaned ECG signal with R-peaks
 fig, ax = plt.subplots(figsize=(12,4))
 ax.plot(time, cleaned)
 ax.scatter(
@@ -64,11 +67,13 @@ ax.set_ylabel("Voltage (mv)")
 ax.set_title("Filtered ECG")
 st.pyplot(fig)
 
+# Save the plot as a PNG file
 fig.savefig(
     "output/plots/ecg_plot.png",
     dpi=300
 )
 
+# Calculate HRV metrics
 try:
     hrv = nk.hrv(info, sampling_rate=360)
     sdnn = hrv["HRV_SDNN"].iloc[0]
@@ -76,6 +81,7 @@ try:
     st.metric("SDNN", f"{sdnn:.2f} ms")
     st.metric("RMSSD", f"{rmssd:.2f} ms")
 
+# In case HRV metrics cannot be calculated
 except Exception:
     st.warning("Not enough ECG data to calculate HRV reliably")
 
