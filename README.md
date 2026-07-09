@@ -58,16 +58,16 @@ streamlit run src/app2.py
 
 ## Dashboard Preview
 
-assets/dashboard1.png![Dashboard 1]()
+![Dashboard 1](assets/dashboard1.png)
 
-assets/dashboard2.png![Dashboard 2]()
+![Dashboard 2](assets/dashboard2.png)
 
-assets/Sidebar_selectbox_slider.png![Sidebar]()
+![Sidebar](assets/Sidebar_selectbox_slider.png)
 
-assets/Sidebar_Dropdown.png![Sidebar Dropdown]()
+![Sidebar Dropdown](assets/Sidebar_Dropdown.png)
 
-assets/metrics.png![Metrics]()
+![Metrics](assets/metrics.png)
 
 ## ECG Plot
 
-assets/ECG_Plot.png![ECG Plot]()
+![ECG Plot](assets/ECG_Plot.png)
