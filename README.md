@@ -62,9 +62,13 @@ streamlit run src/app2.py
 
 ![Dashboard 2](assets/dashboard2.png)
 
+### Sidebar
+
 ![Sidebar](assets/Sidebar_selectbox_slider.png)
 
 ![Sidebar Dropdown](assets/Sidebar_Dropdown.png)
+
+### Metrics
 
 ![Metrics](assets/metrics.png)
 
