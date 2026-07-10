@@ -20,13 +20,14 @@ uploaded_file = st.sidebar.file_uploader(
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
     st.write(df)
-    
+
 sampling_rate = st.sidebar.number_input(
     "Sampling Rate (Hz)",
     min_value=100,
     max_value=1000,
-    value=360
+    value=360,
     step=10
+
 )
 
 duration = st.sidebar.slider(
@@ -42,7 +43,7 @@ st.write(
     "Biomedical Engineering Summer Project"
 )
 
-sampling_rate = 360
+sampling_rate = sampling_rate
 
 record = wfdb.rdrecord(f"data/{record_number}")
 
@@ -51,14 +52,15 @@ num_samples = duration * sampling_rate
 ecg = ecg[:num_samples]
 
 # Clean the ECG signal using NeuroKit2
-cleaned = nk.ecg_clean(ecg, sampling_rate=360)
+cleaned = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
 
 # Extract R-peaks and calculate heart rate
 signals, info = nk.ecg_peaks(
     cleaned,
-    sampling_rate=360
+    sampling_rate=sampling_rate
 )
 number_of_beats = len(info["ECG_R_Peaks"])
+duration = len(cleaned) / sampling_rate
 heart_rate = (number_of_beats / duration) * 60
 
 st.metric(
@@ -91,7 +93,7 @@ fig.savefig(
 
 # Calculate HRV metrics
 try:
-    hrv = nk.hrv(info, sampling_rate=360)
+    hrv = nk.hrv(info, sampling_rate=sampling_rate)
     sdnn = hrv["HRV_SDNN"].iloc[0]
     rmssd = hrv["HRV_RMSSD"].iloc[0]
     st.metric("SDNN", f"{sdnn:.2f} ms")
