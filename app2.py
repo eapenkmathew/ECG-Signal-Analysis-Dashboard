@@ -26,6 +26,7 @@ sampling_rate = st.sidebar.number_input(
     min_value=100,
     max_value=1000,
     value=360
+    step=10
 )
 
 duration = st.sidebar.slider(
