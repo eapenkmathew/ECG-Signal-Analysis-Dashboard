@@ -5,10 +5,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import time
+from scipy.signal import find_peaks 
+import serial
+import math
+import itertools
 
 st.title("ECG Signal Analysis Dashboard") 
 
-mode = st.sidebar.radio(
+data_mode = st.sidebar.radio(
     "Select Mode",
     ("MIT-BIH Arrhythmia Database", "Live ECG")
 )
@@ -47,29 +51,34 @@ st.write(
     "Biomedical Engineering Summer Project"
 )
  
-if mode == "Live ECG":
+if data_mode == "Live ECG":
     st.write("Live ECG mode.")
 
     ecg = nk.ecg_simulate(duration=duration, sampling_rate=sampling_rate)
     
     buffer = []
     plot_placeholder = st.empty()
+    heart_placeholder = st.empty()
+    hr_placeholder = st.empty()
 
     window = 5
-
     update_interval = 0.2
     samples_per_update = int(sampling_rate * update_interval)
-
-    for i in range(0, len(ecg), samples_per_update):
-        buffer.extend(ecg[i:i + samples_per_update])
-        buffer = buffer[-sampling_rate * window:]
-
-        current_end = i / sampling_rate
+    
+    for _ in itertools.count():
+        try: 
+            value = float(line)
+            buffer.append(value)
+            buffer = buffer[-(sampling_rate * window):]
+        except:
+                continue
+        
+        current_end = len(buffer) / sampling_rate
         current_start = max(0, current_end - window)
-
+        
         if current_start < 0:
             current_start = 0
-
+            
         time_segment = np.linspace(current_start, current_end, len(buffer))
 
         fig, ax = plt.subplots(figsize=(16,16))
@@ -87,6 +96,24 @@ if mode == "Live ECG":
         
         ax.set_aspect(0.04/0.1, adjustable='box')
 
+        peaks, _ = find_peaks(buffer, height=0.8, distance=sampling_rate*0.25)
+
+        if len(peaks) > 3: 
+            rr_intervals = np.diff(np.array(peaks)) / sampling_rate
+            hr = 60 / rr_intervals[-3]
+        else:
+            hr = "N/A"
+            hr_placeholder.metric(
+                label="Heart Rate",
+                value= "N/A"
+            )
+
+        if hr is not "N/A":
+            hr_placeholder.metric(
+                label="Heart Rate",
+                value=f"{hr:.1f}"
+            )
+
         ax.set_xlabel("Time (seconds)")
         ax.set_ylabel("Voltage (mv)")
         ax.set_title("Live ECG Recording")
@@ -94,7 +121,7 @@ if mode == "Live ECG":
 
         time.sleep(update_interval)
 
-else:
+elif data_mode == "MIT-BIH Arrhythmia Database":
     st.write("MIT-BIH Arrhythmia Database mode.")
     st.write("Selected record:", record_number)
 
@@ -106,9 +133,9 @@ ecg = record.p_signal[:, 0]
 num_samples = duration * sampling_rate
 ecg = ecg[:num_samples]
 
-mode = st.sidebar.radio("ECG Signal Processing Mode", ["Raw", "Filtered"])
+processing_mode = st.sidebar.radio("ECG Signal Processing Mode", ["Raw", "Filtered"])
 
-if mode == "Filtered":
+if processing_mode == "Filtered":
     # Clean the ECG signal using NeuroKit2
     cleaned = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
     
@@ -174,7 +201,7 @@ ax.grid(which="minor", color="lightgrey", linewidth=0.5)
 
 ax.set_aspect(0.04/0.1, adjustable='box')
 
-if mode=="Filtered":
+if processing_mode=="Filtered":
     ax.set_title("Filtered ECG Signal")
 
 else:
