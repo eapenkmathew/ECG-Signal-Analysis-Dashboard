@@ -9,6 +9,145 @@ from scipy.signal import find_peaks
 import serial
 import math
 import itertools
+from collections import deque
+from matplotlib.ticker import MultipleLocator, FormatStrFormatter
+from matplotlib.backends.backend_pdf import PdfPages
+
+def generate_pdf(signal, time_data, average_hr, minimum_hr, maximum_hr, sampling_rate):
+
+    signal = np.array(signal)
+    time_data = np.array(time_data)
+
+    pdf = PdfPages("ECG_Report.pdf")
+
+    samples_per_strip = sampling_rate * 10
+
+    total_strips = math.ceil(
+        len(signal) / samples_per_strip
+    )
+
+
+    for i in range(total_strips):
+
+        start = i * samples_per_strip
+        end = start + samples_per_strip
+
+        strip_signal = signal[start:end]
+        strip_time = time_data[start:end]
+
+        min_length = min(
+            len(strip_signal),
+            len(strip_time)
+        )
+
+        strip_signal = strip_signal[:min_length]
+        strip_time = strip_time[:min_length]
+
+
+        fig, ax = plt.subplots(figsize=(12,4))
+
+        for x in np.arange(
+            strip_time[0],
+            strip_time[-1],
+            0.04
+        ):
+            ax.axvline(
+                x,
+                color="#ffd6d6",
+                linewidth=0.5
+            )
+
+        for x in np.arange(
+            strip_time[0],
+            strip_time[-1],
+            0.2
+        ):
+            ax.axvline(
+                x,
+                color="#ff9999",
+                linewidth=1
+            )
+
+
+        for y in np.arange(-3,3,0.1):
+            ax.axhline(
+                y,
+                color="#ffd6d6",
+                linewidth=0.5
+            )
+
+
+        for y in np.arange(-3,3,0.5):
+            ax.axhline(
+                y,
+                color="#ff9999",
+                linewidth=1
+            )
+
+
+        ax.plot(
+            strip_time,
+            strip_signal,
+            color="black",
+            linewidth=1
+        )
+
+        ax.set_xlim(
+            strip_time[0],
+            strip_time[-1]
+        )
+
+        ax.set_ylim(-3,3)
+
+        ax.set_xlabel("Time (seconds)")
+        ax.set_ylabel("Amplitude")
+
+        ax.set_title(
+            f"ECG Strip {i+1}/{total_strips}"
+        )
+
+
+        pdf.savefig(fig)
+        plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(8,5))
+
+    ax.axis("off")
+
+    summary = f"""
+    ECG Report Summary
+
+    Total recording time:
+    {len(signal)/sampling_rate:.1f} seconds
+
+    Sampling rate:
+    {sampling_rate} Hz
+
+    Average HR:
+    {average_hr:.1f} BPM
+
+    Minimum HR:
+    {minimum_hr:.1f} BPM
+
+    Maximum HR:
+    {maximum_hr:.1f} BPM
+    """
+
+    ax.text(
+        0.1,
+        0.8,
+        summary,
+        fontsize=14
+    )
+
+
+    pdf.savefig(fig)
+    plt.close(fig)
+    pdf.close()
+
+    return "ECG_Report.pdf"
+
+st.success("ECG PDF Report Generated: ECG_Report.pdf")
 
 st.title("ECG Signal Analysis Dashboard") 
 
@@ -53,73 +192,203 @@ st.write(
  
 if data_mode == "Live ECG":
     st.write("Live ECG mode.")
-
-    ecg = nk.ecg_simulate(duration=duration, sampling_rate=sampling_rate)
     
-    buffer = []
+    if "serial_connection" not in st.session_state:
+        st.session_state.serial_connection = serial.Serial(
+        'COM3',
+        230400,
+        timeout=1
+    )
+        st.session_state.serial_connection.reset_input_buffer()
+    ser = st.session_state.serial_connection
+
+    sampling_rate = 250  
+    window = 5       
+    update_interval = 0.01
+    live_buffer = deque(maxlen=sampling_rate * window)
     plot_placeholder = st.empty()
-    heart_placeholder = st.empty()
     hr_placeholder = st.empty()
 
-    window = 5
-    update_interval = 0.2
-    samples_per_update = int(sampling_rate * update_interval)
+    last_peak_update = time.time()
+    info = {"ECG_R_Peaks": np.array([], dtype=int)}
+
+    fig, ax = plt.subplots(figsize=(12,4))
+    ax.set_facecolor("#ffe6e6")
     
-    for _ in itertools.count():
-        try: 
-            value = float(line)
-            buffer.append(value)
-            buffer = buffer[-(sampling_rate * window):]
-        except:
-                continue
-        
-        current_end = len(buffer) / sampling_rate
-        current_start = max(0, current_end - window)
-        
-        if current_start < 0:
-            current_start = 0
-            
-        time_segment = np.linspace(current_start, current_end, len(buffer))
+    ax.xaxis.set_major_locator(MultipleLocator(1))
+    ax.xaxis.set_major_formatter(FormatStrFormatter('%.0f'))
+    ax.yaxis.set_major_locator(MultipleLocator(0.5))
+    ax.xaxis.set_minor_locator(MultipleLocator(0.04))
+    ax.yaxis.set_minor_locator(MultipleLocator(0.1))
+    ax.minorticks_on()
+    
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Amplitude")
+    ax.set_title("Live ECG Recording")
 
-        fig, ax = plt.subplots(figsize=(16,16))
-        ax.plot(time_segment + (current_end - window), buffer, color="black", linewidth=1)
-        ax.set_facecolor("#ffe6e6")
-        ax.set_xlim(current_end - window, current_end)
-        ax.set_ylim(-2, 2)
-        ax.set_xticks(np.arange(current_end - window, current_end, 0.2))
-        ax.set_yticks(np.arange(-2, 2.1, 0.5))
-        ax.grid(which="major", color="lightpink", linewidth=1.0)
-        
-        ax.set_xticks(np.arange( current_end - window, current_end, 0.04), minor=True)
-        ax.set_yticks(np.arange(-2, 2.1, 0.1), minor=True)
-        ax.grid(which="minor", color="lightgrey", linewidth=0.5)
-        
-        ax.set_aspect(0.04/0.1, adjustable='box')
 
-        peaks, _ = find_peaks(buffer, height=0.8, distance=sampling_rate*0.25)
+    st.empty()
+    total_samples = 0
+    heart_rate_history = []
+    average_hr = 0
+    minimum_hr = 0
+    maximum_hr = 0
 
-        if len(peaks) > 3: 
-            rr_intervals = np.diff(np.array(peaks)) / sampling_rate
-            hr = 60 / rr_intervals[-3]
-        else:
-            hr = "N/A"
-            hr_placeholder.metric(
-                label="Heart Rate",
-                value= "N/A"
+    col1, col2, col3, col4 = st.columns(4)
+    current_placeholder = col1.empty()
+    average_placeholder = col2.empty()
+    minimum_placeholder = col3.empty()
+    maximum_placeholder = col4.empty()
+
+    if "raw_recording" not in st.session_state:
+        st.session_state.raw_recording = []
+
+    if "recorded_time" not in st.session_state:
+        st.session_state.recorded_time = []
+
+    if "pdf_ready" not in st.session_state:
+        st.session_state.pdf_ready = False
+
+    generate_report = st.button(
+        "Generate PDF Report",
+        key="generate_pdf"
+    )
+
+    while True:
+        while ser.in_waiting:
+            try:
+                value = float(ser.readline().decode().strip())
+                live_buffer.append(value)
+                st.session_state.raw_recording.append(value)
+                total_samples += 1
+            except ValueError:
+                pass
+
+        if len(live_buffer) < sampling_rate:
+            continue
+
+        signal = np.array(live_buffer)
+        signal = signal - np.mean(signal)
+
+        filtered = nk.ecg_clean(
+            signal,
+            sampling_rate=250
+        )
+
+        filtered = filtered/1000   
+
+        if time.time() - last_peak_update > 0.5:
+
+            signals, info = nk.ecg_peaks(
+            filtered,
+            sampling_rate=sampling_rate,
+            correct_artifacts=True
+        )
+
+          
+            last_peak_update = time.time()
+
+        start_time = (total_samples - len(filtered)) / sampling_rate
+        ax.clear()
+
+        for x in np.arange(start_time, start_time + window + 0.04, 0.04):
+            ax.axvline(
+                x,
+                color="#ffd6d6",
+                linewidth=0.5,
+                zorder=0
             )
 
-        if hr is not "N/A":
-            hr_placeholder.metric(
-                label="Heart Rate",
-                value=f"{hr:.1f}"
+        for x in np.arange(start_time, start_time + window + 1, 0.2):
+            ax.axvline(
+                x,
+                color="#ff9999",
+                linewidth=1.2,
+                zorder=0
             )
 
-        ax.set_xlabel("Time (seconds)")
-        ax.set_ylabel("Voltage (mv)")
-        ax.set_title("Live ECG Recording")
+        for y in np.arange(-3, 3.1, 0.1):
+            ax.axhline(
+                y,
+                color="#ffd6d6",
+                linewidth=0.5,
+                zorder=0
+            )
+
+        for y in np.arange(-3, 3.1, 0.5):
+            ax.axhline(
+                y,
+                color="#ff9999",
+                linewidth=1.2,
+                zorder=0
+            )
+
+
+        t = start_time + np.arange(len(filtered)) / sampling_rate
+        line, = ax.plot(t, filtered, color="black", linewidth=1)
+        line.set_data(t, filtered)
+
+        ax.set_xlim(start_time, start_time + window)
+        ax.set_ylim(-3, 3)
+        ax.set_aspect('auto')
+        
+        if len(info["ECG_R_Peaks"]) >= 2:
+            rr = np.diff(info["ECG_R_Peaks"]) / sampling_rate
+            hr = 60 / np.mean(rr)
+
+            heart_rate_history.append(hr)
+            current_hr = heart_rate_history[-1]
+            average_hr = np.mean(heart_rate_history)
+            minimum_hr = np.min(heart_rate_history)
+            maximum_hr = np.max(heart_rate_history)
+
+            current_placeholder.metric("Current HR", f"{current_hr:.1f} BPM")
+            average_placeholder.metric("Average", f"{average_hr:.1f} BPM")
+            minimum_placeholder.metric("Minimum", f"{minimum_hr:.1f} BPM")
+            maximum_placeholder.metric("Maximum", f"{maximum_hr:.1f} BPM")
+
         plot_placeholder.pyplot(fig)
 
+        if generate_report:
+            
+            full_signal = np.array(st.session_state.raw_recording)
+            full_signal = full_signal - np.mean(full_signal)
+
+            filtered_full = nk.ecg_clean(
+                full_signal,
+                sampling_rate=sampling_rate
+            )
+
+            filtered_full = filtered_full / 1000
+
+            time_data = np.arange(len(filtered_full)) / sampling_rate
+
+            generate_pdf(
+                filtered_full,
+                time_data,
+                average_hr,
+                minimum_hr,
+                maximum_hr,
+                sampling_rate
+            )
+
+            st.session_state.pdf_ready = True
+
+            if st.session_state.pdf_ready:
+
+                with open("ECG_Report.pdf", "rb") as file:
+
+                    st.download_button(
+                        "Download ECG PDF Report",
+                        file,
+                        file_name="ECG_Report.pdf",
+                        mime="application/pdf",
+                        key="download_pdf"
+                    )
+
         time.sleep(update_interval)
+
+
 
 elif data_mode == "MIT-BIH Arrhythmia Database":
     st.write("MIT-BIH Arrhythmia Database mode.")
