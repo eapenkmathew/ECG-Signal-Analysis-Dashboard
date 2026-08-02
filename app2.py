@@ -13,12 +13,55 @@ from collections import deque
 from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 from matplotlib.backends.backend_pdf import PdfPages
 
-def generate_pdf(signal, time_data, average_hr, minimum_hr, maximum_hr, sampling_rate):
+def generate_pdf(signal, time_data, average_hr, minimum_hr, maximum_hr, sampling_rate, patient_name, age, gender):
 
     signal = np.array(signal)
     time_data = np.array(time_data)
 
     pdf = PdfPages("ECG_Report.pdf")
+
+    fig, ax = plt.subplots(figsize=(8,5))
+
+    ax.axis("off")
+
+    recording_time = len(signal) / sampling_rate
+
+    y = 0.95
+
+    ax.text(0.05, y, "ECG REPORT", fontsize=18, weight="bold")
+    y -= 0.08
+
+    ax.text(0.05, y, "PATIENT INFORMATION", fontsize=14, weight="bold")
+    y -= 0.05
+    ax.text(0.05, y, f"Patient Name : {patient_name}")
+    y -= 0.04
+    ax.text(0.05, y, f"Age : {age}")
+    y -= 0.04
+    ax.text(0.05, y, f"Gender : {gender}")
+
+    y -= 0.08
+
+    ax.text(0.05, y, "RECORDING INFORMATION", fontsize=14, weight="bold")
+    y -= 0.05
+    ax.text(0.05, y, f"Sampling Rate : {sampling_rate} Hz")
+    y -= 0.04
+    ax.text(0.05, y, f"Recording Time : {recording_time:.1f} s")
+    y -= 0.04
+    ax.text(0.05, y, f"Total Samples : {len(signal)}")
+
+    y -= 0.08
+
+    ax.text(0.05, y, "HEART RATE SUMMARY", fontsize=14, weight="bold")
+    y -= 0.05
+    ax.text(0.05, y, f"Average HR : {average_hr:.1f} BPM")
+    y -= 0.04
+    ax.text(0.05, y, f"Minimum HR : {minimum_hr:.1f} BPM")
+    y -= 0.04
+    ax.text(0.05, y, f"Maximum HR : {maximum_hr:.1f} BPM")
+
+
+    pdf.savefig(fig)
+    plt.close(fig)
 
     samples_per_strip = sampling_rate * 10
 
@@ -110,44 +153,9 @@ def generate_pdf(signal, time_data, average_hr, minimum_hr, maximum_hr, sampling
         pdf.savefig(fig)
         plt.close(fig)
 
-    fig, ax = plt.subplots(figsize=(8,5))
-
-    ax.axis("off")
-
-    summary = f"""
-    ECG Report Summary
-
-    Total recording time:
-    {len(signal)/sampling_rate:.1f} seconds
-
-    Sampling rate:
-    {sampling_rate} Hz
-
-    Average HR:
-    {average_hr:.1f} BPM
-
-    Minimum HR:
-    {minimum_hr:.1f} BPM
-
-    Maximum HR:
-    {maximum_hr:.1f} BPM
-    """
-
-    ax.text(
-        0.1,
-        0.8,
-        summary,
-        fontsize=14
-    )
-
-
-    pdf.savefig(fig)
-    plt.close(fig)
     pdf.close()
 
     return "ECG_Report.pdf"
-
-st.success("ECG PDF Report Generated: ECG_Report.pdf")
 
 st.title("ECG Signal Analysis Dashboard") 
 
@@ -189,9 +197,31 @@ duration = st.sidebar.slider(
 st.write(
     "Biomedical Engineering Summer Project"
 )
- 
+
 if data_mode == "Live ECG":
     st.write("Live ECG mode.")
+    
+    st.subheader("Patient Information")
+
+    patient_name = st.text_input(
+        "Patient Name",
+        key="patient_name"
+    )
+
+    age = st.number_input(
+        "Age",
+        min_value=0,
+        max_value=120,
+        value=20,
+        key="patient_age"
+    )
+
+    gender = st.selectbox(
+        "Gender",
+        ["Male", "Female"],
+        key="patient_gender"
+    )
+    
     
     if "serial_connection" not in st.session_state:
         st.session_state.serial_connection = serial.Serial(
@@ -229,10 +259,6 @@ if data_mode == "Live ECG":
 
     st.empty()
     total_samples = 0
-    heart_rate_history = []
-    average_hr = 0
-    minimum_hr = 0
-    maximum_hr = 0
 
     col1, col2, col3, col4 = st.columns(4)
     current_placeholder = col1.empty()
@@ -243,18 +269,34 @@ if data_mode == "Live ECG":
     if "raw_recording" not in st.session_state:
         st.session_state.raw_recording = []
 
+    if "heart_rate_history" not in st.session_state:
+        st.session_state.heart_rate_history = []
+
+    if "average_hr" not in st.session_state:
+        st.session_state.average_hr = 0
+
+    if "minimum_hr" not in st.session_state:
+        st.session_state.minimum_hr = 0
+
+    if "maximum_hr" not in st.session_state:
+        st.session_state.maximum_hr = 0
+
     if "recorded_time" not in st.session_state:
         st.session_state.recorded_time = []
 
     if "pdf_ready" not in st.session_state:
         st.session_state.pdf_ready = False
 
-    generate_report = st.button(
-        "Generate PDF Report",
-        key="generate_pdf"
-    )
+    if "recording" not in st.session_state:
+        st.session_state.recording = True
 
-    while True:
+    if st.button(
+        "Stop Recording & Generate PDF",
+        key="generate_pdf"
+    ):
+        st.session_state.recording = False
+
+    while st.session_state.recording:
         while ser.in_waiting:
             try:
                 value = float(ser.readline().decode().strip())
@@ -275,7 +317,8 @@ if data_mode == "Live ECG":
             sampling_rate=250
         )
 
-        filtered = filtered/1000   
+        filtered = -filtered
+        filtered = filtered/400   
 
         if time.time() - last_peak_update > 0.5:
 
@@ -336,57 +379,100 @@ if data_mode == "Live ECG":
             rr = np.diff(info["ECG_R_Peaks"]) / sampling_rate
             hr = 60 / np.mean(rr)
 
-            heart_rate_history.append(hr)
-            current_hr = heart_rate_history[-1]
-            average_hr = np.mean(heart_rate_history)
-            minimum_hr = np.min(heart_rate_history)
-            maximum_hr = np.max(heart_rate_history)
+            st.session_state.heart_rate_history.append(hr)
+
+            current_hr = st.session_state.heart_rate_history[-1]
+
+            st.session_state.average_hr = np.mean(
+                st.session_state.heart_rate_history
+            )
+
+            st.session_state.minimum_hr = np.min(
+                st.session_state.heart_rate_history
+            )
+
+            st.session_state.maximum_hr = np.max(
+                st.session_state.heart_rate_history
+            )
 
             current_placeholder.metric("Current HR", f"{current_hr:.1f} BPM")
-            average_placeholder.metric("Average", f"{average_hr:.1f} BPM")
-            minimum_placeholder.metric("Minimum", f"{minimum_hr:.1f} BPM")
-            maximum_placeholder.metric("Maximum", f"{maximum_hr:.1f} BPM")
+            average_placeholder.metric("Average", f"{st.session_state.average_hr:.1f} BPM")
+            minimum_placeholder.metric("Minimum", f"{st.session_state.minimum_hr:.1f} BPM")
+            maximum_placeholder.metric("Maximum", f"{st.session_state.maximum_hr:.1f} BPM")
 
         plot_placeholder.pyplot(fig)
-
-        if generate_report:
-            
-            full_signal = np.array(st.session_state.raw_recording)
-            full_signal = full_signal - np.mean(full_signal)
-
-            filtered_full = nk.ecg_clean(
-                full_signal,
-                sampling_rate=sampling_rate
-            )
-
-            filtered_full = filtered_full / 1000
-
-            time_data = np.arange(len(filtered_full)) / sampling_rate
-
-            generate_pdf(
-                filtered_full,
-                time_data,
-                average_hr,
-                minimum_hr,
-                maximum_hr,
-                sampling_rate
-            )
-
-            st.session_state.pdf_ready = True
-
-            if st.session_state.pdf_ready:
-
-                with open("ECG_Report.pdf", "rb") as file:
-
-                    st.download_button(
-                        "Download ECG PDF Report",
-                        file,
-                        file_name="ECG_Report.pdf",
-                        mime="application/pdf",
-                        key="download_pdf"
-                    )
-
         time.sleep(update_interval)
+
+    if not st.session_state.recording:
+
+        full_signal = np.array(st.session_state.raw_recording)
+
+        full_signal = full_signal - np.mean(full_signal)
+
+        filtered_full = nk.ecg_clean(
+            full_signal,
+            sampling_rate=sampling_rate
+        )
+
+        filtered_full = -filtered_full
+        filtered_full = filtered_full / 400
+
+        signals, info_full = nk.ecg_peaks(
+            filtered_full,
+            sampling_rate=sampling_rate,
+            correct_artifacts=True
+        )
+
+        if len(info_full["ECG_R_Peaks"]) >= 2:
+            rr = np.diff(info_full["ECG_R_Peaks"]) / sampling_rate
+            hr_values = 60 / rr
+
+            average_hr = np.mean(hr_values)
+            minimum_hr = np.min(hr_values)
+            maximum_hr = np.max(hr_values)
+
+            st.write("Average:", average_hr)
+            st.write("Minimum:", minimum_hr)
+            st.write("Maximum:", maximum_hr)
+        else:
+            st.write("Not enough R-peaks detected!")
+
+        time_data = np.arange(len(filtered_full)) / sampling_rate
+
+        st.write(st.session_state.patient_name)
+        st.write(st.session_state.patient_age)
+        st.write(st.session_state.patient_gender)
+
+        generate_pdf(
+            filtered_full,
+            time_data,
+            st.session_state.average_hr,
+            st.session_state.minimum_hr,
+            st.session_state.maximum_hr,
+            sampling_rate,
+            st.session_state.patient_name,
+            st.session_state.patient_age,
+            st.session_state.patient_gender  
+        )
+
+        st.success("ECG PDF Report Generated: ECG_Report.pdf")
+
+        with open("ECG_Report.pdf", "rb") as file:
+
+            st.download_button(
+                "Download ECG PDF Report",
+                file,
+                file_name="ECG_Report.pdf",
+                mime="application/pdf",
+                key="download_pdf"
+            )
+
+        if st.button("Start New Recording"):
+
+            st.session_state.recording = True
+            st.session_state.raw_recording = []
+            st.session_state.recorded_time = []
+            st.rerun()
 
 
 
@@ -394,137 +480,137 @@ elif data_mode == "MIT-BIH Arrhythmia Database":
     st.write("MIT-BIH Arrhythmia Database mode.")
     st.write("Selected record:", record_number)
 
-sampling_rate = sampling_rate
+    sampling_rate = sampling_rate
 
-record = wfdb.rdrecord(f"data/{record_number}")
+    record = wfdb.rdrecord(f"data/{record_number}")
 
-ecg = record.p_signal[:, 0]
-num_samples = duration * sampling_rate
-ecg = ecg[:num_samples]
+    ecg = record.p_signal[:, 0]
+    num_samples = duration * sampling_rate
+    ecg = ecg[:num_samples]
 
-processing_mode = st.sidebar.radio("ECG Signal Processing Mode", ["Raw", "Filtered"])
+    processing_mode = st.sidebar.radio("ECG Signal Processing Mode", ["Raw", "Filtered"])
 
-if processing_mode == "Filtered":
-    # Clean the ECG signal using NeuroKit2
-    cleaned = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
-    
-else:
-    cleaned = ecg
+    if processing_mode == "Filtered":
+        # Clean the ECG signal using NeuroKit2
+        cleaned = nk.ecg_clean(ecg, sampling_rate=sampling_rate)
+        
+    else:
+        cleaned = ecg
 
-# Extract R-peaks and calculate heart rate
-signals, info = nk.ecg_peaks(
-    cleaned,
-    sampling_rate=sampling_rate
-)
-number_of_beats = len(info["ECG_R_Peaks"])
-duration = len(cleaned) / sampling_rate
-heart_rate = (number_of_beats / duration) * 60
+    # Extract R-peaks and calculate heart rate
+    signals, info = nk.ecg_peaks(
+        cleaned,
+        sampling_rate=sampling_rate
+    )
+    number_of_beats = len(info["ECG_R_Peaks"])
+    duration = len(cleaned) / sampling_rate
+    heart_rate = (number_of_beats / duration) * 60
 
-st.metric(
-    label="Heart Rate",
-    value=f"{heart_rate} BPM"
-)
-
-
-time = np.arange(len(cleaned)) / sampling_rate
-
-window=5
-total_duration = len(cleaned) / sampling_rate
-if total_duration > window:
-    start_sec = st.slider(
-         "Scroll through the ECG signal using the slider below:",
-        min_value=0,
-        max_value=int(total_duration - window),
-        value=0
+    st.metric(
+        label="Heart Rate",
+        value=f"{heart_rate} BPM"
     )
 
-else:
-    start_sec = 0
 
-end_sec = start_sec + window
+    time = np.arange(len(cleaned)) / sampling_rate
 
-start_idx = int(start_sec * sampling_rate)
-end_idx   = int(end_sec * sampling_rate)
-segment = cleaned[start_idx:end_idx]
-time_segment = time[start_idx:end_idx]
+    window=5
+    total_duration = len(cleaned) / sampling_rate
+    if total_duration > window:
+        start_sec = st.slider(
+            "Scroll through the ECG signal using the slider below:",
+            min_value=0,
+            max_value=int(total_duration - window),
+            value=0
+        )
 
-# Plot the cleaned ECG signal with R-peaks
-fig, ax = plt.subplots(figsize=(16,16))
-ax.plot(time, cleaned, color="black", linewidth=1)
-ax.scatter(
-    info["ECG_R_Peaks"] / sampling_rate,
-    cleaned[info["ECG_R_Peaks"]],
-    color="red"
-)
-ax.set_facecolor("#ffe6e6")
-ax.set_xlim(time_segment[0], time_segment[-1])   # restrict to 5s
-ax.set_ylim(-2, 2)
+    else:
+        start_sec = 0
 
-ax.set_xticks(np.arange(time_segment[0], time_segment[-1], 0.2))
-ax.set_yticks(np.arange(-2, 2.1, 0.5))
-ax.grid(which="major", color="lightpink", linewidth=1.0)
+    end_sec = start_sec + window
 
-ax.set_xticks(np.arange(time_segment[0], time_segment[-1], 0.04), minor=True)
-ax.set_yticks(np.arange(-2, 2.1, 0.1), minor=True)
-ax.grid(which="minor", color="lightgrey", linewidth=0.5)
+    start_idx = int(start_sec * sampling_rate)
+    end_idx   = int(end_sec * sampling_rate)
+    segment = cleaned[start_idx:end_idx]
+    time_segment = time[start_idx:end_idx]
 
-ax.set_aspect(0.04/0.1, adjustable='box')
+    # Plot the cleaned ECG signal with R-peaks
+    fig, ax = plt.subplots(figsize=(16,16))
+    ax.plot(time, cleaned, color="black", linewidth=1)
+    ax.scatter(
+        info["ECG_R_Peaks"] / sampling_rate,
+        cleaned[info["ECG_R_Peaks"]],
+        color="red"
+    )
+    ax.set_facecolor("#ffe6e6")
+    ax.set_xlim(time_segment[0], time_segment[-1])   # restrict to 5s
+    ax.set_ylim(-2, 2)
 
-if processing_mode=="Filtered":
-    ax.set_title("Filtered ECG Signal")
+    ax.set_xticks(np.arange(time_segment[0], time_segment[-1], 0.2))
+    ax.set_yticks(np.arange(-2, 2.1, 0.5))
+    ax.grid(which="major", color="lightpink", linewidth=1.0)
 
-else:
-    ax.set_title("Raw ECG Signal")
+    ax.set_xticks(np.arange(time_segment[0], time_segment[-1], 0.04), minor=True)
+    ax.set_yticks(np.arange(-2, 2.1, 0.1), minor=True)
+    ax.grid(which="minor", color="lightgrey", linewidth=0.5)
+
+    ax.set_aspect(0.04/0.1, adjustable='box')
+
+    if processing_mode=="Filtered":
+        ax.set_title("Filtered ECG Signal")
+
+    else:
+        ax.set_title("Raw ECG Signal")
 
 
 
-ax.set_xlabel("Time (seconds)")
-ax.set_ylabel("Voltage (mv)")
-st.pyplot(fig)
+    ax.set_xlabel("Time (seconds)")
+    ax.set_ylabel("Voltage (mv)")
+    st.pyplot(fig)
 
 
- 
-# Save the plot as a PNG file
-fig.savefig(
-    "output/plots/ecg_plot.png",
-    dpi=300
-)
+    
+    # Save the plot as a PNG file
+    fig.savefig(
+        "output/plots/ecg_plot.png",
+        dpi=300
+    )
 
-# Calculate HRV metrics
-try:
-    hrv = nk.hrv(info, sampling_rate=sampling_rate)
-    sdnn = hrv["HRV_SDNN"].iloc[0]
-    rmssd = hrv["HRV_RMSSD"].iloc[0]
-    st.metric("SDNN", f"{sdnn:.2f} ms")
-    st.metric("RMSSD", f"{rmssd:.2f} ms")
+    # Calculate HRV metrics
+    try:
+        hrv = nk.hrv(info, sampling_rate=sampling_rate)
+        sdnn = hrv["HRV_SDNN"].iloc[0]
+        rmssd = hrv["HRV_RMSSD"].iloc[0]
+        st.metric("SDNN", f"{sdnn:.2f} ms")
+        st.metric("RMSSD", f"{rmssd:.2f} ms")
 
-# In case HRV metrics cannot be calculated
-except Exception:
-    st.warning("Not enough ECG data to calculate HRV reliably")
+    # In case HRV metrics cannot be calculated
+    except Exception:
+        st.warning("Not enough ECG data to calculate HRV reliably")
 
-results = pd.DataFrame({
+    results = pd.DataFrame({
 
-    "Heart Rate":[heart_rate]
+        "Heart Rate":[heart_rate]
 
-})
+    })
 
-results["SDNN"] = sdnn
-results["RMSSD"] = rmssd
+    results["SDNN"] = sdnn
+    results["RMSSD"] = rmssd
 
-csv = results.to_csv(index=False)
+    csv = results.to_csv(index=False)
 
-st.download_button(
-    "Download Results",
-    csv,
-    file_name="ecg_results.csv",
-    mime="text/csv"
-)
+    st.download_button(
+        "Download Results",
+        csv,
+        file_name="ecg_results.csv",
+        mime="text/csv"
+    )
 
-st.markdown("---")
-st.markdown("""
-### About
-            
-This project analyzes ECG signals from the MIT-BIH Arrhythmia Database
-            
-Developed using Python, Streamlit, WFDB and NeuroKit2.
-""")
+    st.markdown("---")
+    st.markdown("""
+    ### About
+                
+    This project analyzes ECG signals from the MIT-BIH Arrhythmia Database
+                
+    Developed using Python, Streamlit, WFDB and NeuroKit2.
+    """)
